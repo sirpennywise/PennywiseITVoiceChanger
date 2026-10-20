@@ -123,9 +123,9 @@
     <div class="control-group">
       <div class="control-header">
         <span>Noise Gate (Anti-Feedback Cutoff)</span>
-        <strong id="valGate">-40 dB</strong>
+        <strong id="valGate">-50 dB</strong>
       </div>
-      <input type="range" id="sliderGate" min="-60" max="-15" step="1" value="-40" />
+      <input type="range" id="sliderGate" min="-60" max="-15" step="1" value="-50" />
     </div>
 
     <div class="control-group">
@@ -184,7 +184,7 @@
 
     // Live Parameters
     let transposeSemitones = 6.0;
-    let gateThresholdDB = -40.0;
+    let gateThresholdDB = -50.0;
     const NUM_FRAMES = 80; // Locked static frame length for 4096 samples @ 16kHz
     const RVC_MODEL_RATE = 40000; // Standard RVC v2 output sample rate (40000 or 48000)
 
@@ -334,6 +334,41 @@
           dryGainNode.connect(masterGainNode);
           wetGainNode.connect(masterGainNode);
           masterGainNode.connect(audioCtx.destination);
+
+          // Force iOS WebKit / Safari to route output to external USB-C AUX / Headphones
+          const streamDest = audioCtx.createMediaStreamDestination();
+          masterGainNode.connect(streamDest);
+
+          let audioOut = document.getElementById('iosAudioOut');
+          if (!audioOut) {
+            audioOut = document.createElement('audio');
+            audioOut.id = 'iosAudioOut';
+            audioOut.autoplay = true;
+            audioOut.playsInline = true;
+            audioOut.style.display = 'none';
+            document.body.appendChild(audioOut);
+          }
+          audioOut.srcObject = streamDest.stream;
+          await audioOut.play().catch(e => console.warn('HTML Audio play warning:', e));
+
+          if ('setSinkId' in HTMLMediaElement.prototype && audioOut.setSinkId) {
+            try {
+              const devices = await navigator.mediaDevices.enumerateDevices();
+              const outputs = devices.filter(d => d.kind === 'audiooutput');
+              const externalOut = outputs.find(d => 
+                d.label.toLowerCase().includes('sabrent') ||
+                d.label.toLowerCase().includes('headphone') ||
+                d.label.toLowerCase().includes('usb') ||
+                d.label.toLowerCase().includes('adapter') ||
+                d.label.toLowerCase().includes('external')
+              );
+              if (externalOut) {
+                await audioOut.setSinkId(externalOut.deviceId);
+              }
+            } catch (e) {
+              console.warn('setSinkId error:', e);
+            }
+          }
 
           // Listen for 16kHz 4096-sample windows from the AudioWorklet
           workletNode.port.onmessage = (e) => {
