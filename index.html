@@ -411,7 +411,7 @@
           });
 
           await audioCtx.audioWorklet.addModule('./rvc-worklet.js');
-          const micSource = audioCtx.createMediaStreamSource(stream);
+          micSource = audioCtx.createMediaStreamSource(stream);
           workletNode = new AudioWorkletNode(audioCtx, 'rvc-worklet-processor');
 
           // Build Procedural Storm-Drain Sewer Reverb
