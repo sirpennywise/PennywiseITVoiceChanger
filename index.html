@@ -495,9 +495,9 @@
       const t0 = performance.now();
 
       try {
-        // Step A: Run ContentVec (HuBERT) [1, 4096] -> [1, 40, 768]
+        // Step A: Run ContentVec (HuBERT) [1, 1, 4096] -> [1, 40, 768]
         const hubertInputName = hubertSession.inputNames[0];
-        const sourceTensor = new ort.Tensor('float32', window16k, [1, window16k.length]);
+        const sourceTensor = new ort.Tensor('float32', window16k, [1, 1, window16k.length]);
         const hubertOut = await hubertSession.run({ [hubertInputName]: sourceTensor });
         const rawFeats = hubertOut[hubertSession.outputNames[0]].data; // [1, 40, 768]
 
