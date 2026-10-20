@@ -455,33 +455,26 @@
                 outputSelect.innerHTML = '';
                 const outputDevices = devices.filter(d => d.kind === 'audiooutput');
 
+                const defaultOpt = document.createElement('option');
+                defaultOpt.value = '';
+                defaultOpt.text = '🔊 Default Windows Output (Where YouTube Plays)';
+                defaultOpt.selected = true;
+                outputSelect.appendChild(defaultOpt);
+
                 outputDevices.forEach((device, i) => {
                   const option = document.createElement('option');
                   option.value = device.deviceId;
-                  option.text = device.label || `USB-C Audio Output ${i + 1}`;
-                  if (device.label.toLowerCase().includes('usb') ||
-                      device.label.toLowerCase().includes('sabrent') ||
-                      device.label.toLowerCase().includes('headphone') ||
-                      device.label.toLowerCase().includes('external')) {
-                    option.selected = true;
-                  }
+                  option.text = device.label || `Audio Output ${i + 1}`;
                   outputSelect.appendChild(option);
                 });
 
-                if (outputSelect.options.length === 0) {
-                  const opt = document.createElement('option');
-                  opt.value = '';
-                  opt.text = 'Default System Speaker / USB-C AUX';
-                  outputSelect.appendChild(opt);
-                }
-
                 const applySink = async (deviceId) => {
-                  if (!deviceId) return;
+                  const targetSink = deviceId || '';
                   if (audioCtx && typeof audioCtx.setSinkId === 'function') {
-                    await audioCtx.setSinkId(deviceId).catch(e => console.warn('setSinkId err:', e));
+                    await audioCtx.setSinkId(targetSink).catch(e => console.warn('setSinkId err:', e));
                   }
                   if (audioElement && typeof audioElement.setSinkId === 'function') {
-                    await audioElement.setSinkId(deviceId).catch(e => console.warn('audioElement setSinkId err:', e));
+                    await audioElement.setSinkId(targetSink).catch(e => console.warn('audioElement setSinkId err:', e));
                   }
                 };
 
@@ -490,9 +483,7 @@
                   statusText.textContent = `Routed to: ${outputSelect.options[outputSelect.selectedIndex].text}`;
                 };
 
-                if (outputSelect.value) {
-                  await applySink(outputSelect.value);
-                }
+                await applySink('');
               }
             } catch (e) {
               console.warn('enumerateDevices error:', e);
