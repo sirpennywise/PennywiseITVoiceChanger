@@ -20,7 +20,7 @@ class RVCWorkletProcessor extends AudioWorkletProcessor {
     this.readIndex = 0;
     this.bufferedCount = 0;
     this.isPrebuffering = true;
-    this.prebufferThreshold = Math.floor(0.14 * this.hwRate);
+    this.prebufferThreshold = Math.floor(0.05 * this.hwRate);
 
     // Crossfade tail at 40kHz to eliminate chunk boundary pops
     this.crossfadeLen = 512;

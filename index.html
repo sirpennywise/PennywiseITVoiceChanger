@@ -585,6 +585,7 @@
 
         const inferMs = (performance.now() - t0).toFixed(0);
         dbReadout.textContent = `${db.toFixed(0)} dB | AI: ${inferMs} ms`;
+        console.log(`[RVC AI Success] Generated ${outSamples.length} audio samples in ${inferMs} ms`);
 
         workletNode.port.postMessage(
           { type: 'SYNTH_CHUNK', samples: outSamples, modelRate: RVC_MODEL_RATE },
