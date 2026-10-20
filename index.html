@@ -297,10 +297,10 @@
         graphOptimizationLevel: 'all'
       });
 
-      statusText.textContent = 'Compiling Pennywise RVC (WebGPU/WASM)...';
+      statusText.textContent = 'Compiling Pennywise RVC (WASM SIMD)...';
       rvcSession = await ort.InferenceSession.create(rvcBytes, {
-        executionProviders: ['webgpu', 'wasm'],
-        graphOptimizationLevel: 'disabled',
+        executionProviders: ['wasm'],
+        graphOptimizationLevel: 'all',
         enableCpuMemArena: true
       });
 
