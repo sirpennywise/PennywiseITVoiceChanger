@@ -108,6 +108,16 @@
       <button class="preset" data-pitch="3" data-reverb="0.35">🌧️ Sewer Whisper (+3st)</button>
       <button class="preset" data-pitch="-5" data-reverb="0.45">👹 Deadlights (-5st)</button>
     </div>
+
+    <!-- Audio Output Selector for Sabrent USB-C Adapter -->
+    <div class="control-group" style="margin-top: 12px; margin-bottom: 0;">
+      <div class="control-header">
+        <span>Audio Output Destination</span>
+      </div>
+      <select id="audioOutputSelect" style="width: 100%; padding: 10px; background: #1e222d; color: var(--text); border: 1px solid #374151; border-radius: 8px; font-size: 0.85rem;">
+        <option value="">Default System Output (Tap Start First)</option>
+      </select>
+    </div>
   </div>
 
   <!-- Real-Time DSP & Neural Tuning Controls -->
@@ -351,22 +361,55 @@
           audioOut.srcObject = streamDest.stream;
           await audioOut.play().catch(e => console.warn('HTML Audio play warning:', e));
 
-          if ('setSinkId' in HTMLMediaElement.prototype && audioOut.setSinkId) {
+          if ('enumerateDevices' in navigator.mediaDevices) {
             try {
               const devices = await navigator.mediaDevices.enumerateDevices();
-              const outputs = devices.filter(d => d.kind === 'audiooutput');
-              const externalOut = outputs.find(d => 
-                d.label.toLowerCase().includes('sabrent') ||
-                d.label.toLowerCase().includes('headphone') ||
-                d.label.toLowerCase().includes('usb') ||
-                d.label.toLowerCase().includes('adapter') ||
-                d.label.toLowerCase().includes('external')
-              );
-              if (externalOut) {
-                await audioOut.setSinkId(externalOut.deviceId);
+              const outputSelect = document.getElementById('audioOutputSelect');
+              if (outputSelect) {
+                outputSelect.innerHTML = '';
+                const outputDevices = devices.filter(d => d.kind === 'audiooutput');
+
+                outputDevices.forEach((device, i) => {
+                  const option = document.createElement('option');
+                  option.value = device.deviceId;
+                  option.text = device.label || `USB-C Audio Output ${i + 1}`;
+                  if (device.label.toLowerCase().includes('usb') ||
+                      device.label.toLowerCase().includes('sabrent') ||
+                      device.label.toLowerCase().includes('headphone') ||
+                      device.label.toLowerCase().includes('external')) {
+                    option.selected = true;
+                  }
+                  outputSelect.appendChild(option);
+                });
+
+                if (outputSelect.options.length === 0) {
+                  const opt = document.createElement('option');
+                  opt.value = '';
+                  opt.text = 'Default System Speaker / USB-C AUX';
+                  outputSelect.appendChild(opt);
+                }
+
+                const applySink = async (deviceId) => {
+                  if (!deviceId) return;
+                  if (audioCtx && typeof audioCtx.setSinkId === 'function') {
+                    await audioCtx.setSinkId(deviceId).catch(e => console.warn('setSinkId err:', e));
+                  }
+                  if (audioOut && typeof audioOut.setSinkId === 'function') {
+                    await audioOut.setSinkId(deviceId).catch(e => console.warn('audioOut setSinkId err:', e));
+                  }
+                };
+
+                outputSelect.onchange = async (e) => {
+                  await applySink(e.target.value);
+                  statusText.textContent = `Routed to: ${outputSelect.options[outputSelect.selectedIndex].text}`;
+                };
+
+                if (outputSelect.value) {
+                  await applySink(outputSelect.value);
+                }
               }
             } catch (e) {
-              console.warn('setSinkId error:', e);
+              console.warn('enumerateDevices error:', e);
             }
           }
 
