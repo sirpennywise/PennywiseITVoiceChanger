@@ -133,9 +133,9 @@
     <div class="control-group">
       <div class="control-header">
         <span>Noise Gate (Anti-Feedback Cutoff)</span>
-        <strong id="valGate">-50 dB</strong>
+        <strong id="valGate">-60 dB</strong>
       </div>
-      <input type="range" id="sliderGate" min="-60" max="-15" step="1" value="-50" />
+      <input type="range" id="sliderGate" min="-70" max="-15" step="1" value="-60" />
     </div>
 
     <div class="control-group">
@@ -229,7 +229,7 @@
 
     // Live Parameters
     let transposeSemitones = 6.0;
-    let gateThresholdDB = -50.0;
+    let gateThresholdDB = -60.0;
     const NUM_FRAMES = 80; // Locked static frame length for 4096 samples @ 16kHz
     const RVC_MODEL_RATE = 40000; // Standard RVC v2 output sample rate (40000 or 48000)
 
@@ -500,7 +500,7 @@
       const pct = Math.min(100, Math.max(0, ((db + 60) / 60) * 100));
       meterFill.style.width = `${pct}%`;
 
-      if (db < gateThresholdDB) {
+      if (gateThresholdDB > -68 && db < gateThresholdDB) {
         dbReadout.textContent = `${db.toFixed(0)} dB (GATED)`;
         const silentChunk = new Float32Array(Math.floor(4096 * (RVC_MODEL_RATE / 16000)));
         workletNode.port.postMessage(
@@ -660,7 +660,7 @@
 
     document.getElementById('sliderGate').addEventListener('input', (e) => {
       gateThresholdDB = parseFloat(e.target.value);
-      document.getElementById('valGate').textContent = `${gateThresholdDB} dB`;
+      document.getElementById('valGate').textContent = gateThresholdDB <= -68 ? 'OFF' : `${gateThresholdDB} dB`;
       const markerPct = Math.min(100, Math.max(0, ((gateThresholdDB + 60) / 60) * 100));
       gateMarker.style.left = `${markerPct}%`;
     });
