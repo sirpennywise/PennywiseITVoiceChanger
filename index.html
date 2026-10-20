@@ -159,6 +159,17 @@
     🔒 Activate Pocket Blackout Mode (Keep Screen Unlocked)
   </button>
 
+  <!-- On-Screen Debug Console -->
+  <div class="card" style="margin-top: 14px;">
+    <div class="control-header">
+      <span>On-Screen Debug Console</span>
+      <button id="btnClearLog" style="padding: 2px 8px; font-size: 0.75rem;">Clear</button>
+    </div>
+    <div id="debugLog" style="font-family: monospace; font-size: 0.75rem; color: #a3e635; background: #000; padding: 8px; border-radius: 6px; height: 110px; overflow-y: auto; white-space: pre-wrap; word-break: break-all;">
+[System Initializing...]
+    </div>
+  </div>
+
   <!-- Hidden HTML5 Audio Element to force iOS Safari hardware audio routing -->
   <audio id="outputAudioElement" autoplay playsinline style="display:none;"></audio>
 
@@ -169,6 +180,27 @@
 
   <script type="module">
     import * as ort from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.all.min.mjs';
+
+    // On-Screen Debug Console Interceptor
+    const debugLog = document.getElementById('debugLog');
+    function logToScreen(msg, type = 'info') {
+      if (!debugLog) return;
+      const time = new Date().toLocaleTimeString().split(' ')[0];
+      const color = type === 'error' ? '#f87171' : type === 'warn' ? '#fbbf24' : '#a3e635';
+      debugLog.innerHTML += `<div style="color:${color}">[${time}] ${msg}</div>`;
+      debugLog.scrollTop = debugLog.scrollHeight;
+    }
+
+    const _origLog = console.log;
+    const _origErr = console.error;
+    const _origWarn = console.warn;
+    console.log = (...args) => { _origLog(...args); logToScreen(args.join(' '), 'info'); };
+    console.error = (...args) => { _origErr(...args); logToScreen(args.join(' '), 'error'); };
+    console.warn = (...args) => { _origWarn(...args); logToScreen(args.join(' '), 'warn'); };
+
+    document.getElementById('btnClearLog')?.addEventListener('click', () => {
+      if (debugLog) debugLog.innerHTML = '[Log Cleared]';
+    });
 
     // Point ONNX Runtime to the CDN for its multi-threaded .wasm and .mjs worker files
     ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
@@ -308,6 +340,7 @@
       try {
         if (!audioCtx) {
           audioCtx = new (window.AudioContext || window.webkitAudioContext)({
+            sampleRate: 48000, // Match hardware clock to prevent resampling locks
             latencyHint: 'interactive'
           });
 
