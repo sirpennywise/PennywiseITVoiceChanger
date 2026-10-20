@@ -39,41 +39,24 @@ class RVCWorkletProcessor extends AudioWorkletProcessor {
   }
 
   enqueueSynthesizedChunk(chunk40k, modelRate) {
+    if (!chunk40k || chunk40k.length === 0) return;
     if (modelRate) this.outModelRate = modelRate;
 
-    const hopSamples40k = Math.floor(this.hopSize * (this.outModelRate / this.inTargetRate)); // 5120 samples @ 40kHz
-    const neededLen = hopSamples40k + this.crossfadeLen;
+    const numSamples = chunk40k.length;
 
-    const startIdx = Math.max(0, chunk40k.length - neededLen);
-    const cleanHop40k = new Float32Array(hopSamples40k);
-
-    for (let i = 0; i < hopSamples40k; i++) {
-      const sample = chunk40k[startIdx + i] || 0.0;
-      if (i < this.crossfadeLen) {
-        const fadeIn = i / this.crossfadeLen;
-        const fadeOut = 1.0 - fadeIn;
-        cleanHop40k[i] = (this.prevTail40k[i] * fadeOut) + (sample * fadeIn);
-      } else {
-        cleanHop40k[i] = sample;
-      }
-    }
-
-    for (let i = 0; i < this.crossfadeLen; i++) {
-      this.prevTail40k[i] = chunk40k[startIdx + hopSamples40k + i] || 0.0;
-    }
-
-    const outLengthHw = Math.floor(hopSamples40k * (this.hwRate / this.outModelRate));
-    const ratio = (hopSamples40k - 1) / Math.max(1, outLengthHw - 1);
+    // Resample full generated audio chunk from model rate (40kHz) to hardware sample rate (e.g. 48kHz)
+    const outLengthHw = Math.floor(numSamples * (this.hwRate / this.outModelRate));
+    const ratio = (numSamples - 1) / Math.max(1, outLengthHw - 1);
 
     for (let i = 0; i < outLengthHw; i++) {
       const srcPos = i * ratio;
       const idx0 = Math.floor(srcPos);
-      const idx1 = Math.min(hopSamples40k - 1, idx0 + 1);
+      const idx1 = Math.min(numSamples - 1, idx0 + 1);
       const frac = srcPos - idx0;
 
-      const interpolated = cleanHop40k[idx0] + frac * (cleanHop40k[idx1] - cleanHop40k[idx0]);
+      const sample = chunk40k[idx0] + frac * (chunk40k[idx1] - chunk40k[idx0]);
 
-      this.outQueue[this.writeIndex] = interpolated;
+      this.outQueue[this.writeIndex] = sample;
       this.writeIndex = (this.writeIndex + 1) % this.outQueueSize;
       this.bufferedCount++;
     }
