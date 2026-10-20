@@ -583,9 +583,24 @@
         const audioTensor = rvcOut[rvcSession.outputNames[0]];
         const outSamples = new Float32Array(audioTensor.data);
 
+        // Peak Amplitude Clip Protection (Prevents PCM 16-bit / un-normalized float square wave buzzing)
+        let maxAmp = 0.0;
+        for (let i = 0; i < outSamples.length; i++) {
+          const abs = Math.abs(outSamples[i]);
+          if (abs > maxAmp) maxAmp = abs;
+        }
+
+        if (maxAmp > 1.2) {
+          console.warn(`[Clip Protection] Peak amplitude ${maxAmp.toFixed(1)} > 1.0 -> Normalizing output scale`);
+          const norm = 0.95 / maxAmp;
+          for (let i = 0; i < outSamples.length; i++) {
+            outSamples[i] *= norm;
+          }
+        }
+
         const inferMs = (performance.now() - t0).toFixed(0);
         dbReadout.textContent = `${db.toFixed(0)} dB | AI: ${inferMs} ms`;
-        console.log(`[RVC AI Success] Generated ${outSamples.length} audio samples in ${inferMs} ms`);
+        console.log(`[RVC Frame] Peak: ${maxAmp.toFixed(2)} | Generated ${outSamples.length} samples in ${inferMs} ms`);
 
         workletNode.port.postMessage(
           { type: 'SYNTH_CHUNK', samples: outSamples, modelRate: RVC_MODEL_RATE },
