@@ -91,6 +91,9 @@
     <button id="btnLoad" class="primary">1. Load AI Models</button>
     <button id="btnStart" disabled>2. Start Live Voice</button>
   </div>
+  <button id="btnPassthrough" style="width: 100%; margin-bottom: 14px; background: #374151; color: #fff;">
+    🔊 Test Direct Mic Passthrough (No AI)
+  </button>
 
   <!-- Live Mic Input & Noise Gate Meter -->
   <div class="card">
@@ -195,7 +198,11 @@
     const _origErr = console.error;
     const _origWarn = console.warn;
     console.log = (...args) => { _origLog(...args); logToScreen(args.join(' '), 'info'); };
-    console.error = (...args) => { _origErr(...args); logToScreen(args.join(' '), 'error'); };
+    console.error = (...args) => {
+      _origErr(...args);
+      const msg = args.map(a => (a && a.stack) ? `${a.message}\n${a.stack}` : (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
+      logToScreen(msg, 'error');
+    };
     console.warn = (...args) => { _origWarn(...args); logToScreen(args.join(' '), 'warn'); };
 
     document.getElementById('btnClearLog')?.addEventListener('click', () => {
@@ -219,6 +226,7 @@
     let hubertSession = null;
     let rvcSession = null;
     let audioCtx = null;
+    let micSource = null;
     let workletNode = null;
     let dryGainNode = null;
     let wetGainNode = null;
@@ -248,8 +256,35 @@
     const meterFill = document.getElementById('meterFill');
     const gateMarker = document.getElementById('gateMarker');
 
-    // Show live confirmation on the UI that 4-Thread SIMD is active
-    const threadMode = window.crossOriginIsolated ? '4-Thread SIMD ⚡' : '1-Thread (Reloading...)';
+    // Passthrough Direct Mic Test
+    let isPassthrough = false;
+    let directMicNode = null;
+    const btnPassthrough = document.getElementById('btnPassthrough');
+
+    btnPassthrough?.addEventListener('click', async () => {
+      if (!audioCtx || !micSource) {
+        alert('Please tap "2. Start Live Voice" first to initialize the microphone!');
+        return;
+      }
+      isPassthrough = !isPassthrough;
+      if (isPassthrough) {
+        if (!directMicNode && micSource) {
+          directMicNode = micSource;
+          directMicNode.connect(masterGainNode);
+        }
+        btnPassthrough.style.background = '#10b981';
+        btnPassthrough.textContent = '🔊 Passthrough ACTIVE (Raw Mic Playing)';
+        console.log('Direct mic passthrough ENABLED - Testing hardware speakers');
+      } else {
+        if (directMicNode) {
+          try { directMicNode.disconnect(masterGainNode); } catch(e){}
+          directMicNode = null;
+        }
+        btnPassthrough.style.background = '#374151';
+        btnPassthrough.textContent = '🔊 Test Direct Mic Passthrough (No AI)';
+        console.log('Direct mic passthrough DISABLED');
+      }
+    });
     const subtitleEl = document.querySelector('.subtitle');
     if (subtitleEl) {
       subtitleEl.textContent = `iPhone 17 Pro Max • ${threadMode} • USB-C Mic → AUX`;
