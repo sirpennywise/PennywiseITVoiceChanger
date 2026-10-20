@@ -159,6 +159,9 @@
     🔒 Activate Pocket Blackout Mode (Keep Screen Unlocked)
   </button>
 
+  <!-- Hidden HTML5 Audio Element to force iOS Safari hardware audio routing -->
+  <audio id="outputAudioElement" autoplay playsinline style="display:none;"></audio>
+
   <!-- Pocket Blackout Screen -->
   <div id="pocketOverlay">
     <p style="font-size: 1rem; color: #262626;">🔒 POCKET LOCK ACTIVE (WakeLock ON)<br><br>Double-tap screen rapidly to unlock UI</p>
@@ -345,21 +348,15 @@
           wetGainNode.connect(masterGainNode);
           masterGainNode.connect(audioCtx.destination);
 
-          // Force iOS WebKit / Safari to route output to external USB-C AUX / Headphones
-          const streamDest = audioCtx.createMediaStreamDestination();
-          masterGainNode.connect(streamDest);
+          // Create a MediaStream destination to bridge the Web Audio graph to a real HTML5 <audio> element
+          const audioDest = audioCtx.createMediaStreamDestination();
+          masterGainNode.connect(audioDest);
 
-          let audioOut = document.getElementById('iosAudioOut');
-          if (!audioOut) {
-            audioOut = document.createElement('audio');
-            audioOut.id = 'iosAudioOut';
-            audioOut.autoplay = true;
-            audioOut.playsInline = true;
-            audioOut.style.display = 'none';
-            document.body.appendChild(audioOut);
+          const audioElement = document.getElementById('outputAudioElement');
+          if (audioElement) {
+            audioElement.srcObject = audioDest.stream;
+            audioElement.play().catch(e => console.log("Audio element play error:", e));
           }
-          audioOut.srcObject = streamDest.stream;
-          await audioOut.play().catch(e => console.warn('HTML Audio play warning:', e));
 
           if ('enumerateDevices' in navigator.mediaDevices) {
             try {
@@ -394,8 +391,8 @@
                   if (audioCtx && typeof audioCtx.setSinkId === 'function') {
                     await audioCtx.setSinkId(deviceId).catch(e => console.warn('setSinkId err:', e));
                   }
-                  if (audioOut && typeof audioOut.setSinkId === 'function') {
-                    await audioOut.setSinkId(deviceId).catch(e => console.warn('audioOut setSinkId err:', e));
+                  if (audioElement && typeof audioElement.setSinkId === 'function') {
+                    await audioElement.setSinkId(deviceId).catch(e => console.warn('audioElement setSinkId err:', e));
                   }
                 };
 
