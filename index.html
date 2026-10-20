@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <!-- 1. Unlock SharedArrayBuffer (4-Thread WASM SIMD) on GitHub Pages -->
+  <script src="./coi-serviceworker.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Pennywise Live RVC Rig (iPhone 17 Pro Max)</title>
   <style>
@@ -155,9 +157,18 @@
   <script type="module">
     import * as ort from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.all.min.mjs';
 
-    // Configure ONNX Runtime Web for iOS Safari
+    // Point ONNX Runtime to the CDN for its multi-threaded .wasm and .mjs worker files
+    ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
     ort.env.wasm.simd = true;
-    ort.env.wasm.numThreads = crossOriginIsolated ? 4 : 1;
+
+    // Unlock 4 threads when Cross-Origin Isolated
+    ort.env.wasm.numThreads = window.crossOriginIsolated ? 4 : 1;
+    // Run WASM inside a dedicated Web Worker so UI sliders stay smooth
+    ort.env.wasm.proxy = true;
+
+    console.log(
+      `Cross-Origin Isolated: ${window.crossOriginIsolated} | Active WASM Threads: ${ort.env.wasm.numThreads}`
+    );
 
     // State & Sessions
     let hubertSession = null;
@@ -192,16 +203,38 @@
     const meterFill = document.getElementById('meterFill');
     const gateMarker = document.getElementById('gateMarker');
 
+    // Show live confirmation on the UI that 4-Thread SIMD is active
+    const threadMode = window.crossOriginIsolated ? '4-Thread SIMD ⚡' : '1-Thread (Reloading...)';
+    const subtitleEl = document.querySelector('.subtitle');
+    if (subtitleEl) {
+      subtitleEl.textContent = `iPhone 17 Pro Max • ${threadMode} • USB-C Mic → AUX`;
+    }
+
     // ---------------------------------------------------------
     // 1. Cache & Load Quantized ONNX Models
     // ---------------------------------------------------------
     async function fetchAndCacheModel(url) {
-      const cache = await caches.open('pennywise-rvc-v1');
+      const cacheName = 'pennywise-rvc-v2';
+      const cache = await caches.open(cacheName);
       let response = await cache.match(url);
+
+      if (response) {
+        const buf = await response.clone().arrayBuffer();
+        if (buf.byteLength < 1000) {
+          console.warn(`Purging stale LFS pointer cache for ${url} (${buf.byteLength} bytes)`);
+          await cache.delete(url);
+          response = null;
+        }
+      }
+
       if (!response) {
         statusText.textContent = `Downloading ${url}...`;
         response = await fetch(url);
         if (!response.ok) throw new Error(`Missing model file: ${url}`);
+        const buf = await response.clone().arrayBuffer();
+        if (buf.byteLength < 1000) {
+          throw new Error(`Downloaded model file ${url} is too small (${buf.byteLength} bytes). LFS pointer issue?`);
+        }
         await cache.put(url, response.clone());
       }
       return await response.arrayBuffer();
@@ -222,7 +255,7 @@
       statusText.textContent = 'Compiling Pennywise RVC (WebGPU/WASM)...';
       rvcSession = await ort.InferenceSession.create(rvcBytes, {
         executionProviders: ['webgpu', 'wasm'],
-        graphOptimizationLevel: 'all',
+        graphOptimizationLevel: 'disabled',
         enableCpuMemArena: true
       });
 
