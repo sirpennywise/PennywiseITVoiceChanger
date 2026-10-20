@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Pennywise Live RVC Rig (iPhone 17 Pro Max)</title>
+  <style>
+    :root {
+      --bg: #0b0c10;
+      --card: #15171e;
+      --red: #e52521;
+      --amber: #f59e0b;
+      --green: #10b981;
+      --text: #f3f4f6;
+      --muted: #9ca3af;
+    }
+    * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+    body {
+      margin: 0; padding: 16px;
+      background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+    }
+    h1 { font-size: 1.35rem; margin: 0 0 4px 0; display: flex; align-items: center; gap: 8px; }
+    .subtitle { font-size: 0.82rem; color: var(--muted); margin-bottom: 16px; }
+    .card {
+      background: var(--card); border: 1px solid #262936;
+      border-radius: 14px; padding: 16px; margin-bottom: 14px;
+    }
+    .status-bar {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 0.85rem; padding: 10px 14px; border-radius: 10px;
+      background: #1e222d; margin-bottom: 14px;
+    }
+    .badge {
+      padding: 4px 8px; border-radius: 6px; font-weight: 600; font-size: 0.75rem;
+      background: #374151; color: #fff;
+    }
+    .badge.ready { background: var(--green); color: #052e16; }
+    .badge.live { background: var(--red); animation: pulse 1.4s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+
+    .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+    .preset-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 10px; }
+    button {
+      padding: 14px 12px; border: none; border-radius: 12px;
+      font-size: 0.95rem; font-weight: 700; cursor: pointer;
+      color: var(--text); background: #262b38; transition: 0.15s;
+    }
+    button:active { transform: scale(0.97); }
+    button.primary { background: var(--red); color: #fff; }
+    button.preset.active { outline: 2px solid var(--red); background: #2f1618; }
+    button:disabled { opacity: 0.4; pointer-events: none; }
+
+    .control-group { margin-bottom: 14px; }
+    .control-header { display: flex; justify-content: space-between; font-size: 0.88rem; margin-bottom: 6px; }
+    input[type="range"] { width: 100%; accent-color: var(--red); height: 6px; }
+
+    .meter-track {
+      width: 100%; height: 12px; background: #090a0f;
+      border-radius: 6px; overflow: hidden; position: relative;
+    }
+    .meter-fill {
+      height: 100%; width: 0%; background: linear-gradient(90deg, #10b981, #f59e0b, #e52521);
+      transition: width 0.08s linear;
+    }
+    .gate-line {
+      position: absolute; top: 0; bottom: 0; width: 2px; background: #fff; z-index: 2;
+    }
+
+    /* Pocket Lock Blackout Overlay */
+    #pocketOverlay {
+      display: none; position: fixed; inset: 0; background: #000000;
+      z-index: 9999; flex-direction: column; justify-content: center;
+      align-items: center; color: #333; text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🎈 Pennywise RVC Live Rig</h1>
+  <div class="subtitle">iPhone 17 Pro Max • USB-C Mic In → ONNX WebGPU → AUX Speaker</div>
+
+  <div class="status-bar">
+    <span id="statusText">Tap "1. Load AI Models" to initialize</span>
+    <span id="statusBadge" class="badge">IDLE</span>
+  </div>
+
+  <div class="btn-row">
+    <button id="btnLoad" class="primary">1. Load AI Models</button>
+    <button id="btnStart" disabled>2. Start Live Voice</button>
+  </div>
+
+  <!-- Live Mic Input & Noise Gate Meter -->
+  <div class="card">
+    <div class="control-header">
+      <span>Mic Input Level vs. Gate Threshold</span>
+      <span id="dbReadout">-60 dB | Latency: -- ms</span>
+    </div>
+    <div class="meter-track">
+      <div id="gateMarker" class="gate-line" style="left: 33%;"></div>
+      <div id="meterFill" class="meter-fill"></div>
+    </div>
+
+    <div class="preset-row">
+      <button class="preset active" data-pitch="6" data-reverb="0.22">🎈 High Laugh (+6st)</button>
+      <button class="preset" data-pitch="3" data-reverb="0.35">🌧️ Sewer Whisper (+3st)</button>
+      <button class="preset" data-pitch="-5" data-reverb="0.45">👹 Deadlights (-5st)</button>
+    </div>
+  </div>
+
+  <!-- Real-Time DSP & Neural Tuning Controls -->
+  <div class="card">
+    <div class="control-group">
+      <div class="control-header">
+        <span>Pitch Transpose (Deep Voice Lift)</span>
+        <strong id="valPitch">+6 Semitones</strong>
+      </div>
+      <input type="range" id="sliderPitch" min="-12" max="12" step="0.5" value="6" />
+    </div>
+
+    <div class="control-group">
+      <div class="control-header">
+        <span>Noise Gate (Anti-Feedback Cutoff)</span>
+        <strong id="valGate">-40 dB</strong>
+      </div>
+      <input type="range" id="sliderGate" min="-60" max="-15" step="1" value="-40" />
+    </div>
+
+    <div class="control-group">
+      <div class="control-header">
+        <span>Storm-Drain Sewer Reverb Mix</span>
+        <strong id="valReverb">22%</strong>
+      </div>
+      <input type="range" id="sliderReverb" min="0" max="0.8" step="0.02" value="0.22" />
+    </div>
+
+    <div class="control-group" style="margin-bottom:0;">
+      <div class="control-header">
+        <span>AUX Speaker Output Boost</span>
+        <strong id="valGain">1.4x</strong>
+      </div>
+      <input type="range" id="sliderGain" min="0.5" max="3.0" step="0.1" value="1.4" />
+    </div>
+  </div>
+
+  <button id="btnPocket" style="width: 100%; background: #1f2430;">
+    🔒 Activate Pocket Blackout Mode (Keep Screen Unlocked)
+  </button>
+
+  <!-- Pocket Blackout Screen -->
+  <div id="pocketOverlay">
+    <p style="font-size: 1rem; color: #262626;">🔒 POCKET LOCK ACTIVE (WakeLock ON)<br><br>Double-tap screen rapidly to unlock UI</p>
+  </div>
+
+  <script type="module">
+    import * as ort from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.all.min.mjs';
+
+    // Configure ONNX Runtime Web for iOS Safari
+    ort.env.wasm.simd = true;
+    ort.env.wasm.numThreads = crossOriginIsolated ? 4 : 1;
+
+    // State & Sessions
+    let hubertSession = null;
+    let rvcSession = null;
+    let audioCtx = null;
+    let workletNode = null;
+    let dryGainNode = null;
+    let wetGainNode = null;
+    let masterGainNode = null;
+    let wakeLock = null;
+    let isRunning = false;
+    let isInferring = false; // Prevents overlapping inference queues
+
+    // Live Parameters
+    let transposeSemitones = 6.0;
+    let gateThresholdDB = -40.0;
+    const NUM_FRAMES = 80; // Locked static frame length for 4096 samples @ 16kHz
+    const RVC_MODEL_RATE = 40000; // Standard RVC v2 output sample rate (40000 or 48000)
+
+    // Pre-allocated static random noise tensor so we never re-create it per frame
+    const staticNoiseData = new Float32Array(1 * 192 * NUM_FRAMES);
+    for (let i = 0; i < staticNoiseData.length; i++) {
+      staticNoiseData[i] = (Math.random() - 0.5) * 0.66666;
+    }
+
+    // UI Elements
+    const statusText = document.getElementById('statusText');
+    const statusBadge = document.getElementById('statusBadge');
+    const btnLoad = document.getElementById('btnLoad');
+    const btnStart = document.getElementById('btnStart');
+    const dbReadout = document.getElementById('dbReadout');
+    const meterFill = document.getElementById('meterFill');
+    const gateMarker = document.getElementById('gateMarker');
+
+    // ---------------------------------------------------------
+    // 1. Cache & Load Quantized ONNX Models
+    // ---------------------------------------------------------
+    async function fetchAndCacheModel(url) {
+      const cache = await caches.open('pennywise-rvc-v1');
+      let response = await cache.match(url);
+      if (!response) {
+        statusText.textContent = `Downloading ${url}...`;
+        response = await fetch(url);
+        if (!response.ok) throw new Error(`Missing model file: ${url}`);
+        await cache.put(url, response.clone());
+      }
+      return await response.arrayBuffer();
+    }
+
+    export async function loadPennywiseSessions() {
+      const [hubertBytes, rvcBytes] = await Promise.all([
+        fetchAndCacheModel('./contentvec_uint8.onnx'),
+        fetchAndCacheModel('./pennywise_webgpu_fp16.onnx')
+      ]);
+
+      statusText.textContent = 'Compiling ContentVec (WASM SIMD)...';
+      hubertSession = await ort.InferenceSession.create(hubertBytes, {
+        executionProviders: ['wasm'],
+        graphOptimizationLevel: 'all'
+      });
+
+      statusText.textContent = 'Compiling Pennywise RVC (WebGPU/WASM)...';
+      rvcSession = await ort.InferenceSession.create(rvcBytes, {
+        executionProviders: ['webgpu', 'wasm'],
+        graphOptimizationLevel: 'all',
+        enableCpuMemArena: true
+      });
+
+      return { hubertSession, rvcSession };
+    }
+
+    btnLoad.addEventListener('click', async () => {
+      try {
+        btnLoad.disabled = true;
+        statusBadge.textContent = 'LOADING';
+        await loadPennywiseSessions();
+        statusText.textContent = 'Models Ready! Plug in USB-C Adapter & Tap Start';
+        statusBadge.textContent = 'READY';
+        statusBadge.className = 'badge ready';
+        btnStart.disabled = false;
+      } catch (err) {
+        console.error(err);
+        statusText.textContent = `Error: ${err.message}`;
+        statusBadge.textContent = 'ERROR';
+        btnLoad.disabled = false;
+      }
+    });
+
+    // ---------------------------------------------------------
+    // 2. Start USB-C Mic Capture, Sewer Reverb & AUX Output
+    // ---------------------------------------------------------
+    btnStart.addEventListener('click', async () => {
+      if (isRunning) {
+        await audioCtx.suspend();
+        isRunning = false;
+        btnStart.textContent = '2. Start Live Voice';
+        statusBadge.textContent = 'PAUSED';
+        statusBadge.className = 'badge ready';
+        return;
+      }
+
+      try {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)({
+            latencyHint: 'interactive'
+          });
+
+          // Request USB-C Mic with iOS voice filters strictly disabled
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: false,
+              noiseSuppression: false,
+              autoGainControl: false,
+              channelCount: 1
+            }
+          });
+
+          await audioCtx.audioWorklet.addModule('./rvc-worklet.js');
+          const micSource = audioCtx.createMediaStreamSource(stream);
+          workletNode = new AudioWorkletNode(audioCtx, 'rvc-worklet-processor');
+
+          // Build Procedural Storm-Drain Sewer Reverb
+          const convolver = audioCtx.createConvolver();
+          convolver.buffer = createSewerImpulseResponse(audioCtx, 1.6, 3.2);
+
+          dryGainNode = audioCtx.createGain();
+          wetGainNode = audioCtx.createGain();
+          masterGainNode = audioCtx.createGain();
+
+          const revMix = parseFloat(document.getElementById('sliderReverb').value);
+          dryGainNode.gain.value = 1.0 - revMix * 0.5;
+          wetGainNode.gain.value = revMix;
+          masterGainNode.gain.value = parseFloat(document.getElementById('sliderGain').value);
+
+          // Signal Routing: Mic -> RVC Worklet -> Dry/Wet Sewer Reverb -> Master Boost -> USB-C AUX
+          micSource.connect(workletNode);
+          workletNode.connect(dryGainNode);
+          workletNode.connect(convolver);
+          convolver.connect(wetGainNode);
+
+          dryGainNode.connect(masterGainNode);
+          wetGainNode.connect(masterGainNode);
+          masterGainNode.connect(audioCtx.destination);
+
+          // Listen for 16kHz 4096-sample windows from the AudioWorklet
+          workletNode.port.onmessage = (e) => {
+            if (e.data.type === 'MIC_WINDOW_16K') {
+              handleAudioWindow16k(e.data.window16k);
+            }
+          };
+        }
+
+        await audioCtx.resume();
+        await requestKeepAwake();
+        isRunning = true;
+        btnStart.textContent = '⏹ Stop Live Voice';
+        statusBadge.textContent = 'LIVE ON AUX';
+        statusBadge.className = 'badge live';
+        statusText.textContent = 'Speak into mask mic • Outputting to AUX';
+      } catch (err) {
+        console.error(err);
+        statusText.textContent = `Audio Error: ${err.message}`;
+      }
+    });
+
+    // ---------------------------------------------------------
+    // 3. Real-Time Noise Gate + RVC Inference Pipeline
+    // ---------------------------------------------------------
+    async function handleAudioWindow16k(window16k) {
+      // Calculate RMS dB for Noise Gate (prevents speaker feedback)
+      let sumSq = 0.0;
+      for (let i = 0; i < window16k.length; i++) {
+        sumSq += window16k[i] * window16k[i];
+      }
+      const rms = Math.sqrt(sumSq / window16k.length);
+      const db = 20.0 * Math.log10(Math.max(rms, 1e-7));
+
+      // Update UI Meter (-60dB to 0dB scale)
+      const pct = Math.min(100, Math.max(0, ((db + 60) / 60) * 100));
+      meterFill.style.width = `${pct}%`;
+
+      if (db < gateThresholdDB) {
+        dbReadout.textContent = `${db.toFixed(0)} dB (GATED)`;
+        const silentChunk = new Float32Array(Math.floor(4096 * (RVC_MODEL_RATE / 16000)));
+        workletNode.port.postMessage(
+          { type: 'SYNTH_CHUNK', samples: silentChunk, modelRate: RVC_MODEL_RATE },
+          [silentChunk.buffer]
+        );
+        return;
+      }
+
+      if (isInferring || !hubertSession || !rvcSession) return;
+      isInferring = true;
+      const t0 = performance.now();
+
+      try {
+        // Step A: Run ContentVec (HuBERT) [1, 4096] -> [1, 40, 768]
+        const hubertInputName = hubertSession.inputNames[0];
+        const sourceTensor = new ort.Tensor('float32', window16k, [1, window16k.length]);
+        const hubertOut = await hubertSession.run({ [hubertInputName]: sourceTensor });
+        const rawFeats = hubertOut[hubertSession.outputNames[0]].data; // [1, 40, 768]
+
+        // Interpolate 2x along time axis: [1, 40, 768] -> [1, 80, 768] (Standard RVC v2 requirement)
+        const phoneExpanded = new Float32Array(1 * NUM_FRAMES * 768);
+        const srcFrames = Math.floor(rawFeats.length / 768);
+        for (let f = 0; f < NUM_FRAMES; f++) {
+          const srcIdx = Math.min(srcFrames - 1, Math.floor(f / 2));
+          const srcOffset = srcIdx * 768;
+          const dstOffset = f * 768;
+          phoneExpanded.set(rawFeats.subarray(srcOffset, srcOffset + 768), dstOffset);
+        }
+
+        // Step B: Frame-by-Frame F0 Pitch Extraction + Transpose (+6 Semitones)
+        const { pitchf, pitchCoarse } = extractAndTransposePitch(window16k, 16000, NUM_FRAMES, transposeSemitones);
+
+        // Step C: Build RVC Generator Inputs dynamically matching exported input types
+        const feeds = {};
+        for (const name of rvcSession.inputNames) {
+          if (name === 'phone') {
+            feeds[name] = new ort.Tensor('float32', phoneExpanded, [1, NUM_FRAMES, 768]);
+          } else if (name === 'phone_lengths') {
+            feeds[name] = new ort.Tensor('int64', BigInt64Array.from([BigInt(NUM_FRAMES)]), [1]);
+          } else if (name === 'pitch') {
+            feeds[name] = new ort.Tensor('int64', pitchCoarse, [1, NUM_FRAMES]);
+          } else if (name === 'pitchf') {
+            feeds[name] = new ort.Tensor('float32', pitchf, [1, NUM_FRAMES]);
+          } else if (name === 'ds') {
+            feeds[name] = new ort.Tensor('int64', BigInt64Array.from([0n]), [1]);
+          } else if (name === 'rnd') {
+            feeds[name] = new ort.Tensor('float32', staticNoiseData, [1, 192, NUM_FRAMES]);
+          }
+        }
+
+        const rvcOut = await rvcSession.run(feeds);
+        const audioTensor = rvcOut[rvcSession.outputNames[0]];
+        const outSamples = new Float32Array(audioTensor.data);
+
+        const inferMs = (performance.now() - t0).toFixed(0);
+        dbReadout.textContent = `${db.toFixed(0)} dB | AI: ${inferMs} ms`;
+
+        workletNode.port.postMessage(
+          { type: 'SYNTH_CHUNK', samples: outSamples, modelRate: RVC_MODEL_RATE },
+          [outSamples.buffer]
+        );
+      } catch (err) {
+        console.error('RVC Inference Frame Error:', err);
+      } finally {
+        isInferring = false;
+      }
+    }
+
+    // ---------------------------------------------------------
+    // 4. Frame-Level Pitch Tracker + +6 Semitone Shifter
+    // ---------------------------------------------------------
+    function extractAndTransposePitch(samples16k, sr, numFrames, semitoneShift) {
+      const pitchf = new Float32Array(numFrames);
+      const pitchCoarse = new BigInt64Array(numFrames);
+      const pitchMultiplier = Math.pow(2.0, semitoneShift / 12.0);
+
+      const f0MelMin = 1127.0 * Math.log(1.0 + 50.0 / 700.0);
+      const f0MelMax = 1127.0 * Math.log(1.0 + 1100.0 / 700.0);
+
+      const hop = Math.floor(samples16k.length / numFrames); // 51 samples per 3.2ms sub-frame
+      const winSize = 512; // 32ms autocorrelation window for deep voices down to 65Hz
+      const minLag = Math.floor(sr / 500.0); // 500 Hz max
+      const maxLag = Math.floor(sr / 65.0);  // 65 Hz min (captures deep voices cleanly)
+
+      for (let f = 0; f < numFrames; f++) {
+        const center = f * hop;
+        const start = Math.max(0, Math.min(samples16k.length - winSize, center - (winSize >> 1)));
+
+        // Check local frame energy for voiced/unvoiced detection
+        let energy = 0.0;
+        for (let i = 0; i < winSize; i++) {
+          const s = samples16k[start + i];
+          energy += s * s;
+        }
+
+        let baseF0 = 0.0;
+        if (energy / winSize > 1e-5) {
+          let bestLag = 0;
+          let maxCorr = 0.0;
+          for (let lag = minLag; lag <= maxLag; lag += 2) {
+            let corr = 0.0;
+            for (let i = 0; i < winSize - maxLag; i += 2) {
+              corr += samples16k[start + i] * samples16k[start + i + lag];
+            }
+            if (corr > maxCorr) {
+              maxCorr = corr;
+              bestLag = lag;
+            }
+          }
+          if (bestLag > 0 && maxCorr > energy * 0.25) {
+            baseF0 = sr / bestLag;
+          }
+        }
+
+        const shiftedHz = baseF0 > 0 ? baseF0 * pitchMultiplier : 0.0;
+        pitchf[f] = shiftedHz;
+
+        if (shiftedHz > 0) {
+          const f0Mel = 1127.0 * Math.log(1.0 + shiftedHz / 700.0);
+          const melBin = Math.round(((f0Mel - f0MelMin) * 254.0) / (f0MelMax - f0MelMin) + 1.0);
+          pitchCoarse[f] = BigInt(Math.min(255, Math.max(1, melBin)));
+        } else {
+          pitchCoarse[f] = 1n;
+        }
+      }
+
+      return { pitchf, pitchCoarse };
+    }
+
+    // ---------------------------------------------------------
+    // 5. Procedural Storm-Drain Sewer Reverb Generator
+    // ---------------------------------------------------------
+    function createSewerImpulseResponse(ctx, durationSec, decayRate) {
+      const length = Math.floor(ctx.sampleRate * durationSec);
+      const impulse = ctx.createBuffer(2, length, ctx.sampleRate);
+      for (let ch = 0; ch < 2; ch++) {
+        const data = impulse.getChannelData(ch);
+        for (let i = 0; i < length; i++) {
+          // Exponential decay with hollow early metallic reflections
+          const env = Math.pow(1 - i / length, decayRate);
+          const earlyRing = i < ctx.sampleRate * 0.08 ? Math.sin(i * 0.35) * 0.4 : 1.0;
+          data[i] = ((Math.random() * 2 - 1) * env * earlyRing);
+        }
+      }
+      return impulse;
+    }
+
+    // ---------------------------------------------------------
+    // 6. UI Sliders, Presets & Pocket WakeLock
+    // ---------------------------------------------------------
+    document.getElementById('sliderPitch').addEventListener('input', (e) => {
+      transposeSemitones = parseFloat(e.target.value);
+      document.getElementById('valPitch').textContent =
+        `${transposeSemitones > 0 ? '+' : ''}${transposeSemitones} Semitones`;
+    });
+
+    document.getElementById('sliderGate').addEventListener('input', (e) => {
+      gateThresholdDB = parseFloat(e.target.value);
+      document.getElementById('valGate').textContent = `${gateThresholdDB} dB`;
+      const markerPct = Math.min(100, Math.max(0, ((gateThresholdDB + 60) / 60) * 100));
+      gateMarker.style.left = `${markerPct}%`;
+    });
+
+    document.getElementById('sliderReverb').addEventListener('input', (e) => {
+      const mix = parseFloat(e.target.value);
+      document.getElementById('valReverb').textContent = `${Math.round(mix * 100)}%`;
+      if (dryGainNode && wetGainNode) {
+        dryGainNode.gain.value = 1.0 - mix * 0.5;
+        wetGainNode.gain.value = mix;
+      }
+    });
+
+    document.getElementById('sliderGain').addEventListener('input', (e) => {
+      const g = parseFloat(e.target.value);
+      document.getElementById('valGain').textContent = `${g.toFixed(1)}x`;
+      if (masterGainNode) masterGainNode.gain.value = g;
+    });
+
+    document.querySelectorAll('.preset').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.preset').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        const p = parseFloat(btn.dataset.pitch);
+        const r = parseFloat(btn.dataset.reverb);
+
+        transposeSemitones = p;
+        document.getElementById('sliderPitch').value = p;
+        document.getElementById('valPitch').textContent = `${p > 0 ? '+' : ''}${p} Semitones`;
+
+        document.getElementById('sliderReverb').value = r;
+        document.getElementById('valReverb').textContent = `${Math.round(r * 100)}%`;
+        if (dryGainNode && wetGainNode) {
+          dryGainNode.gain.value = 1.0 - r * 0.5;
+          wetGainNode.gain.value = r;
+        }
+      });
+    });
+
+    // WakeLock + Pocket Blackout Screen
+    async function requestKeepAwake() {
+      if ('wakeLock' in navigator) {
+        try {
+          wakeLock = await navigator.wakeLock.request('screen');
+        } catch (e) {
+          console.warn('WakeLock request failed:', e);
+        }
+      }
+    }
+
+    const pocketOverlay = document.getElementById('pocketOverlay');
+    document.getElementById('btnPocket').addEventListener('click', async () => {
+      await requestKeepAwake();
+      pocketOverlay.style.display = 'flex';
+    });
+
+    let lastTap = 0;
+    pocketOverlay.addEventListener('touchend', (e) => {
+      const now = Date.now();
+      if (now - lastTap < 350) {
+        pocketOverlay.style.display = 'none';
+      }
+      lastTap = now;
+      e.preventDefault();
+    });
+  </script>
+</body>
+</html>
