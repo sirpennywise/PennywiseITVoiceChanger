@@ -285,6 +285,7 @@
         console.log('Direct mic passthrough DISABLED');
       }
     });
+    const threadMode = window.crossOriginIsolated ? '4-Thread SIMD ⚡' : '1-Thread (Reloading...)';
     const subtitleEl = document.querySelector('.subtitle');
     if (subtitleEl) {
       subtitleEl.textContent = `iPhone 17 Pro Max • ${threadMode} • USB-C Mic → AUX`;
