@@ -344,7 +344,7 @@
     export async function loadPennywiseSessions() {
       const [hubertBytes, rvcBytes] = await Promise.all([
         fetchAndCacheModel('./contentvec_uint8.onnx'),
-        fetchAndCacheModel('./pennywise_hybrid_uint8.onnx')
+        fetchAndCacheModel('./pennywise.onnx')
       ]);
 
       statusText.textContent = 'Compiling ContentVec (WASM SIMD)...';
