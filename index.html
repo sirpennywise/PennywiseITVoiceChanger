@@ -259,28 +259,48 @@
     // 1. Cache & Load Quantized ONNX Models
     // ---------------------------------------------------------
     async function fetchAndCacheModel(url) {
-      const cacheName = 'pennywise-rvc-v2';
-      const cache = await caches.open(cacheName);
-      let response = await cache.match(url);
+      let cache = null;
+      if (typeof window.caches !== 'undefined') {
+        try {
+          cache = await caches.open('pennywise-rvc-v2');
+        } catch (e) {
+          console.warn('CacheStorage not available:', e);
+        }
+      }
 
+      let response = cache ? await cache.match(url) : null;
       if (response) {
-        const buf = await response.clone().arrayBuffer();
-        if (buf.byteLength < 1000) {
-          console.warn(`Purging stale LFS pointer cache for ${url} (${buf.byteLength} bytes)`);
-          await cache.delete(url);
+        try {
+          const buf = await response.clone().arrayBuffer();
+          if (buf.byteLength < 1000) {
+            console.warn(`Purging stale cache for ${url} (${buf.byteLength} bytes)`);
+            await cache.delete(url);
+            response = null;
+          }
+        } catch (e) {
           response = null;
         }
       }
 
       if (!response) {
         statusText.textContent = `Downloading ${url}...`;
-        response = await fetch(url);
-        if (!response.ok) throw new Error(`Missing model file: ${url}`);
+        try {
+          response = await fetch(url);
+        } catch (e) {
+          throw new Error(`Failed to fetch ${url}. Please make sure you open http://localhost:8080/index.html in your browser!`);
+        }
+        if (!response.ok) throw new Error(`HTTP ${response.status} when fetching ${url}`);
         const buf = await response.clone().arrayBuffer();
         if (buf.byteLength < 1000) {
-          throw new Error(`Downloaded model file ${url} is too small (${buf.byteLength} bytes). LFS pointer issue?`);
+          throw new Error(`Downloaded model ${url} is invalid pointer file (${buf.byteLength} bytes)`);
         }
-        await cache.put(url, response.clone());
+        if (cache) {
+          try {
+            await cache.put(url, response.clone());
+          } catch (e) {
+            console.warn('Cache write warning:', e);
+          }
+        }
       }
       return await response.arrayBuffer();
     }
